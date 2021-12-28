@@ -1,3 +1,38 @@
+# To avoid accidental upload of source data of any kind or generated plots, figures, and summary statistics:
+*.xlsx
+*.xls
+*.csv
+*.mat
+*.czi
+*.png
+*.tif
+*.tiff
+*.pdf
+*.svg
+*.p
+*.json
+*.avi
+*.AVI
+*.pl2
+*.imu
+*.DVT
+*.gpio
+*.nwb
+*.db
+*.mj2
+*.txt
+*.hdf5
+*.roi
+*.zip
+*.Identifier
+*.identifier
+*.gz
+
+
+# Have an extra directory that will not be uploaded for whatever content
+exclude_from_GitHub/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
