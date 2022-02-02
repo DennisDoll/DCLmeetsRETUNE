@@ -5,6 +5,8 @@ from pandas import DataFrame
 import pandas as pd
 import numpy as np
 
+SORTED_COLUMNS = ['global_cell_id', 'date', 'session_cell_id', 'mouse_line', 'sex', 'brain_region', 'cell_type', 
+                  'stimulation_string', 'stimulation_frequency-Hz', 'stimulation_duration-ms', 'filepath_detected_events']
 
 class Database:
     
@@ -17,10 +19,11 @@ class Database:
     for further (statistical) analyses and plotting.
     """
     
-    def __init__(self, root_dir: Path, raw_data_dir: Path):
+    def __init__(self, root_dir: Path):
         self.root_dir = root_dir
         self.subdirectories = Subdirectories(root_dir = root_dir)
-        self.global_cell_id = 0 
+        self.global_cell_id = 0
+        self.cells_in_database = list()
 
     def load_database_from_disk(self):
         # Option to load previously created and saved database
@@ -30,24 +33,50 @@ class Database:
         # Save all information to disk
         pass
     
-    def add_new_cell_recording(self, cell_recordings_dir: Path):
-        new_recording = CellRecording()
-        recording_overview = new_recording.create_recordings_overview(cell_recordings_dir = cell_recordings_dir,
-                                                                      global_cell_id = self.global_cell_id)
-        if hasattr(self, 'recorded_cells') == False:
-            self.recorded_cells = recording_overview
+    def add_new_cell_recording(self, cell_recordings_dir: Path, overwrite: bool):
+        increase_global_cell_id_count = True
+        if overwrite:
+            if cell_recordings_dir in self.cells_in_database:
+                global_cell_id = self.cell_recordings_metadata.loc[self.cell_recordings_metadata['filepath_detected_events'].str.startswith(cell_recordings_dir.as_posix()), 'global_cell_id'].iloc[0]
+                increase_global_cell_id_count = False
+                self.cell_recordings_metadata.drop(self.cell_recordings_metadata.loc[self.cell_recordings_metadata['global_cell_id'] == global_cell_id].index, inplace = True)
+                self.cells_in_database.remove(cell_recordings_dir)
+            else:
+                global_cell_id = self.global_cell_id
+                
+
+        if cell_recordings_dir not in self.cells_in_database:
+            new_recording = CellRecording()
+            if overwrite == False:
+                global_cell_id = self.global_cell_id
+            recording_overview = new_recording.create_recordings_overview(cell_recordings_dir = cell_recordings_dir,
+                                                                          global_cell_id = global_cell_id)
+            if hasattr(self, 'cell_recordings_metadata') == False:
+                for column_name in list(recording_overview.columns):
+                    if column_name not in SORTED_COLUMNS:
+                        print(f'Warning: {column_name} not defined in SORTED_COLUMNS.')
+                self.cell_recordings_metadata = recording_overview[SORTED_COLUMNS]
+            else:
+                for column_name in list(recording_overview.columns):
+                    if column_name not in list(self.cell_recordings_metadata.columns):
+                        print(f'Warning: {column_name} represents a new column. Consider updating of all previously added cell recordings.')
+                self.cell_recordings_metadata = pd.concat([self.cell_recordings_metadata, recording_overview], ignore_index = True)
+            self.cell_recordings_metadata.sort_values(by=['global_cell_id'], inplace = True, ignore_index = True)
+            self.cells_in_database.append(cell_recordings_dir)
+            if increase_global_cell_id_count:
+                self.global_cell_id += 1
+        
+            # Trigger update of mix-and-match categories?
         else:
-            self.recorded_cells = pd.concat([self.recorded_cells, overview])
-        
-        self.global_cell_id += 1
-        
-        # Trigger update of mix-and-match categories?
+            note_line1 = f'Note: The recordings in "{cell_recordings_dir.as_posix()}" were already added to the database.\n'
+            note_line2 =  '      Consider passing "overwrite = True" when calling this function in order to update the information.'
+            print(note_line1 + note_line2)
         
     
 
 class CellRecording:
     
-    def create_general_metadata_df(path_to_recordings_dir: Path) -> DataFrame:
+    def create_general_metadata_df(self, path_to_recordings_dir: Path) -> DataFrame:
         metadata_df = pd.read_excel(path_to_recordings_dir.joinpath(f'{path_to_recordings_dir.name}.xlsx'),
                                     sheet_name = 'General information')
         general_metadata = {'date': path_to_recordings_dir.name[:10],
@@ -59,7 +88,7 @@ class CellRecording:
         return pd.DataFrame(general_metadata, index=[0])
     
     
-    def create_stimulation_paradigms_df(path_to_recordings_dir: Path) -> DataFrame:
+    def create_stimulation_paradigms_df(self, path_to_recordings_dir: Path) -> DataFrame:
         filepaths_stimulation_recordings = list()
         for elem in path_to_recordings_dir.iterdir():
             if 'datapoints' not in elem.name:
@@ -96,7 +125,7 @@ class CellRecording:
             stimulation_paradigms['stimulation_string'].append(stimulation_paradigm)
             stimulation_paradigms['stimulation_frequency-Hz'].append(stimulation_frequency)
             stimulation_paradigms['stimulation_duration-ms'].append(stimulation_duration)
-            stimulation_paradigms['filepath_detected_events'].append(filepath)
+            stimulation_paradigms['filepath_detected_events'].append(filepath.as_posix())
         return pd.DataFrame(stimulation_paradigms)
     
     
@@ -105,7 +134,7 @@ class CellRecording:
         stimulation_paradigms = self.create_stimulation_paradigms_df(cell_recordings_dir)
         stimulations_adjusted_general_metadata = pd.concat([general_metadata]*stimulation_paradigms.shape[0], ignore_index=True)
         recordings_overview = pd.concat([stimulations_adjusted_general_metadata, stimulation_paradigms], axis=1)
-        recordings_overview['global_cell_id'] = str(global_feature_id).zfill(4)
+        recordings_overview['global_cell_id'] = str(global_cell_id).zfill(4)
         return recordings_overview
 
 
