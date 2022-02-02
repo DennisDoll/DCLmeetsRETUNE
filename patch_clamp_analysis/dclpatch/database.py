@@ -1,5 +1,6 @@
 from pathlib import Path
 from abc import ABC, abstractmethod
+from typing import List
 from pandas import DataFrame
 
 import pandas as pd
@@ -32,6 +33,18 @@ class Database:
     def save_database_to_disk(self):
         # Save all information to disk
         pass
+
+
+    def list_all_column_values(self, global_cell_id: str, column_name: str) -> List:
+        if hasattr(self, 'cell_recordings_metadata'):
+            if global_cell_id in self.cell_recordings_metadata['global_cell_id'].unique():
+                values = list(self.cell_recordings_metadata.loc[self.cell_recordings_metadata['global_cell_id'] == global_cell_id, column_name].values)
+                return values
+            else:
+                raise ValueError(f'{global_cell_id} is not in the database yet!')
+        else:
+            print('No entries in the database yet')
+                                 
     
     def add_new_cell_recording(self, cell_recordings_dir: Path, overwrite: bool):
         increase_global_cell_id_count = True
