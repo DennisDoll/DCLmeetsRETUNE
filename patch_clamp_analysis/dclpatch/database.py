@@ -2,7 +2,9 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 from typing import List
 from pandas import DataFrame
+import pickle
 import os
+from datetime import datetime
 
 import pandas as pd
 import numpy as np
@@ -89,6 +91,32 @@ class Database:
             note_line1 = f'Note: The recordings in "{cell_recordings_dir.as_posix()}" were already added to the database.\n'
             note_line2 =  '      Consider passing "overwrite = True" when calling this function in order to update the information.'
             print(note_line1 + note_line2)
+            
+            
+    def save_all(self):
+        self.save_all_attributes_as_pickle()
+        self.save_cell_recordings_metadata_as_csv()
+
+    def save_all_attributes_as_pickle(self):
+        project_summary = self.__dict__.copy()
+        filepath = f'{self.subdirectories.project_summary.as_posix()}/{datetime.now().strftime("%Y_%m_%d")}_dclpatch_project_summary.p'        
+        with open(filepath, 'wb') as io:
+            pickle.dump(project_summary, io)
+
+    def save_cell_recordings_metadata_as_csv(self):
+        filepath = f'{self.subdirectories.project_summary.as_posix()}/{datetime.now().strftime("%Y_%m_%d")}_dclpatch_database_overview.csv'  
+        self.cell_recordings_metadata.to_csv(filepath)
+    
+    
+    def load_all(self):
+        result_files = [fname for fname in listdir_nohidden(self.subdirectories.project_summary) if fname.endswith('dclpatch_project_summary.p')]
+        result_files.sort(reverse = True)
+        with open(f'{self.subdirectories.project_summary.as_posix()}/{result_files[0]}', 'rb') as io:
+            project_summary = pickle.load(io)
+
+        for key, value in project_summary.items():
+            if hasattr(self, key) == False:
+                setattr(self, key, value)
         
     
 
@@ -174,3 +202,8 @@ class Subdirectories:
         except:
             self.group_analyses = self.root_dir.joinpath('group_analysis')
             os.mkdir(self.group_analyses.as_posix()) 
+            
+        try: self.project_summary = self.root_dir.joinpath([elem for elem in subdirectories if 'project_summary' in elem][0])
+        except:
+            self.project_summary = self.root_dir.joinpath('project_summary')
+            os.mkdir(self.project_summary.as_posix()) 

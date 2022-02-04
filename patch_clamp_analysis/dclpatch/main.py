@@ -11,6 +11,12 @@ class PatchProject:
     
     def __init__(self, root_dir: Path):
         self.database = Database(root_dir = root_dir)
+        
+    def save_database(self):
+        self.database.save_all()
+        
+    def load_database(self):
+        self.database.load_all()
     
     def add_cell_to_database(self, path_to_cell_recordings_dir: Path, overwrite: bool=False):
         self.database.add_new_cell_recording(cell_recordings_dir = path_to_cell_recordings_dir, overwrite = overwrite)
