@@ -2,12 +2,17 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 from typing import List
 from pandas import DataFrame
+import os
 
 import pandas as pd
 import numpy as np
 
 SORTED_COLUMNS = ['global_cell_id', 'date', 'session_cell_id', 'mouse_line', 'sex', 'brain_region', 'cell_type', 
                   'stimulation_string', 'stimulation_frequency-Hz', 'stimulation_duration-ms', 'filepath_detected_events']
+
+
+def listdir_nohidden(path: Path) -> List:
+    return [f for f in os.listdir(path.as_posix()) if f.startswith('.') == False]
 
 class Database:
     
@@ -156,12 +161,16 @@ class Subdirectories:
     def __init__(self, root_dir: Path):
         self.root_dir = root_dir
         self.create_missing_subdirectories()
-        self.assign_subdirectories_as_attributes()
         
     def create_missing_subdirectories(self):
-        # check for each element in a list of subdirs, whether they exist --> create if not
-        pass
-    
-    def assign_subdirectories_as_attributes(self):
-        # use list of subdirs and set the path to each as attribute
-        pass
+        subdirectories = listdir_nohidden(self.root_dir)
+        
+        try: self.single_cell_analyses = self.root_dir.joinpath([elem for elem in subdirectories if 'single_cell' in elem][0])
+        except:
+            self.single_cell_analyses = self.root_dir.joinpath('single_cell_analysis')
+            os.mkdir(self.single_cell_analyses.as_posix()) 
+        
+        try: self.group_analyses = self.root_dir.joinpath([elem for elem in subdirectories if 'group' in elem][0])
+        except:
+            self.group_analyses = self.root_dir.joinpath('group_analysis')
+            os.mkdir(self.group_analyses.as_posix()) 
