@@ -151,6 +151,15 @@ class CellRecording:
             filename = filename.replace(yyyy_mm_dd_, '')
             cell_id = filename[:filename.index('_')]
             filename = filename.replace(cell_id + '_', '')
+            """
+            new feature:
+            
+            if filename.endswith('_I'):
+                postsynaptic_potential_type = 'IPSP_recording'
+                filename = filename.replace('_I', '')
+            else:
+                postsynaptic_potential_type = 'EPSP_recording'
+            """
             if 'Hz' in filename:
                 stimulation_frequency = int(filename[:filename.index('Hz')])
                 stimulation_duration = filename[filename.index('Hz') + 2 :]
@@ -159,6 +168,14 @@ class CellRecording:
                 else:
                     stimulation_duration = int(stimulation_duration[:stimulation_duration.find('ms')])
                 stimulation_paradigm = f'{stimulation_frequency}-Hz_for_{stimulation_duration}-ms'
+            """
+            new feature:
+            
+            elif 'Bsl2' in filename:
+                stimulation_frequency = np.NaN
+                stimulation_duration = np.NaN
+                stimulation_paradigm = 'control_baseline'            
+            """            
             elif 'Bsl' in filename:
                 stimulation_frequency = np.NaN
                 stimulation_duration = np.NaN
