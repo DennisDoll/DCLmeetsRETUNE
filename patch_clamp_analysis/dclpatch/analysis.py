@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Optional
 
 import pandas as pd
+from pandas import DataFrame
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
@@ -10,10 +11,76 @@ import seaborn as sns
 from .database import Database
 
 
+class BoxplotAnalysis:
+    
+    def __init__(self, database: Database, df_to_use: DataFrame, recording_type: str, plot_title: str):
+        self.database = database
+        self.df = df_to_use
+        self.recording_type = recording_type
+        self.plot_title = plot_title
+        
+    
+    def run_analysis(self, group_column: str, group_id: str, show: bool, save: bool):
+        self.group_column = group_column
+        self.group_id = group_id
+        data = self.df.loc[self.df[group_column] == group_id]
+        self.plot_boxplots(data = data, show = show, save = save)
+        
+    
+    def plot_boxplots(self, data: DataFrame, show: bool, save: bool):
+        columns = list(data.columns)
+        relevant_columns = columns[columns.index('pharmacology') + 1 : columns.index('filepath_main_excel_sheet')]
+        n_cols = 5
+        if len(relevant_columns) % n_cols == 0:
+            n_rows = int(len(relevant_columns) / n_cols)
+        else:
+            n_rows = int(len(relevant_columns) / n_cols) + 1
+            
+        fig = plt.figure(figsize=(16, 5*n_rows), facecolor='white')
+        gs = fig.add_gridspec(n_rows, n_cols)
+        
+        for column_name in relevant_columns:
+            row_idx = int(relevant_columns.index(column_name) / n_cols)
+            col_idx = relevant_columns.index(column_name) % n_cols
+            ax = fig.add_subplot(gs[row_idx, col_idx])
+                
+            sns.boxplot(data = data, x = 'stimulation_string', y = column_name, showfliers = False, palette = 'viridis', ax=ax)
+            sns.stripplot(data = data, x = 'stimulation_string', y = column_name, color = 'black', size=7, ax=ax)
+            
+            if relevant_columns.index(column_name) < len(relevant_columns) - n_cols:
+                plt.xlabel('')
+                plt.xticks([])
+            else:
+                plt.xlabel('')
+                plt.xticks(rotation = 90)
+        plt.suptitle(self.plot_title, y=1.0, fontsize=12)
+        plt.tight_layout()
+
+        if save:
+            if len(list(data['global_cell_id'])) == 1:
+                directory = self.database.subdirectories.single_cell_analyses.as_posix()
+                filename = f'{list(data["global_cell_id"])[0]}_{self.recording_type}'
+            else:
+                directory = self.database.subdirectories.group_analyses.as_posix()
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}'
+            plt.savefig(f'{directory}/{filename}.png', dpi=300)
+        
+        if show:    
+            plt.show()
+        else:
+            plt.close()
+            
+        
+        
+
+
 class CDFAnalysis:
     
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, df_to_use: DataFrame, recording_type: str, plot_title: Optional[str]=None):
         self.database = database
+        self.df = df_to_use
+        self.recording_type = recording_type
+        self.plot_title = plot_title
         self.events_all_stim_paradigms = {'global_cell_id': list(),
                                           'stimulation_string': list(), 
                                           'amplitude': list(), 
@@ -44,9 +111,8 @@ class CDFAnalysis:
                 else:
                     continue
             
-            df = self.database.cell_recordings_metadata
-            stim_string = df.loc[df['filepath_detected_events'] == filepath.as_posix(), 'stimulation_string'].values[0]
-            global_cell_id = df.loc[df['filepath_detected_events'] == filepath.as_posix(), 'global_cell_id'].values[0]
+            stim_string = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'stimulation_string'].values[0]
+            global_cell_id = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'global_cell_id'].values[0]
 
             mean_inter_event_intervals = list()
             for sweep_id in events_single_stim_paradigm[sweep_column].unique():
@@ -61,11 +127,10 @@ class CDFAnalysis:
             self.events_all_stim_paradigms['amplitude'] += list(events_single_stim_paradigm[event_amplitude_column].values)
     
     def get_all_recording_filepaths(self):
-        df = self.database.cell_recordings_metadata
-        self.global_cell_ids = list(df.loc[df[self.group_column] == self.group_id, 'global_cell_id'].unique())
+        self.global_cell_ids = list(self.df.loc[self.df[self.group_column] == self.group_id, 'global_cell_id'].unique())
         filepaths = list()
         for global_cell_id in self.global_cell_ids:
-            tmp_filepaths = self.database.list_all_column_values(global_cell_id = global_cell_id, column_name = 'filepath_detected_events')
+            tmp_filepaths = self.database.list_all_column_values(global_cell_id = global_cell_id, recording_type = self.recording_type, column_name = 'filepath_detected_events')
             tmp_filepaths = [Path(elem) for elem in tmp_filepaths]
             filepaths = filepaths + tmp_filepaths
         return filepaths
@@ -122,16 +187,16 @@ class CDFAnalysis:
         if len(self.global_cell_ids) == 1:
             plt.suptitle(f'Single cell analyses of global_cell_id #{self.global_cell_ids[0]}', fontsize=12)
         else:
-            plt.suptitle(f'Group analyses of all cells matching: {self.group_id} in {self.group_column}', y=1.0, fontsize=12)
+            plt.suptitle(self.plot_title, y=1.0, fontsize=12)
         plt.tight_layout()
         
         if save:
             if len(self.global_cell_ids) == 1:
                 directory = self.database.subdirectories.single_cell_analyses.as_posix()
-                filename = f'{self.global_cell_ids[0]}'
+                filename = f'{self.global_cell_ids[0]}_{self.recording_type}'
             else:
                 directory = self.database.subdirectories.group_analyses.as_posix()
-                filename = f'all_cells_{self.group_id}_in_{self.group_column}'
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}'
             for parameter in columns_for_cdfs:
                 filename = filename + f'_{parameter}'
             plt.savefig(f'{directory}/{filename}.png', dpi=300)
@@ -140,10 +205,3 @@ class CDFAnalysis:
             plt.show()
         else:
             plt.close()
-    
-        
-    
-    
-    
-    
-    
