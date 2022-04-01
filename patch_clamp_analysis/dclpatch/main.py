@@ -47,7 +47,8 @@ class PatchProject:
                 user_warning = user_warning_line1 + user_warning_line2 + user_warning_line3 + user_warning_line4
                 print(user_warning)
         
-    def compare_on_single_cell_level(self, global_cell_id: str, analysis_type: str, recording_type: str, show: bool=True, save: bool=False):
+    def compare_on_single_cell_level(self, global_cell_id: str, analysis_type: str, recording_type: str, 
+                                     show: bool=True, save: bool=False, export: bool=False) -> None:
         self.check_for_valid_input_to_plotting_methods(analysis_type = analysis_type, recording_type = recording_type)
         df_to_use = self.select_corresponding_dataframe(recording_type = recording_type)
         if analysis_type == 'CDF':
@@ -57,10 +58,14 @@ class PatchProject:
         elif analysis_type == 'Boxplot':
             raise ValueError('Boxplot analysis is only possible in the "compare_within_group()" method and not on single cell level.')
         single_cell_analysis.run_analysis(group_column = 'global_cell_id', group_id = global_cell_id, show = show, save = save)
+        if export:
+            filename = f'{analysis_type}_single_cell_analysis_{recording_type}_{global_cell_id}.xlsx'
+            filepath = self.database.subdirectories.exported_excel_sheets.joinpath(filename)
+            df_to_use.to_excel(filepath)
     
     
-    def compare_within_group(self, group_column: str, group_id: str, analysis_type: str, recording_type: str, 
-                             include: Optional[Dict]=None, exclude: Optional[Dict]=None, show: bool=True, save: bool=False):
+    def compare_within_group(self, group_column: str, group_id: str, analysis_type: str, recording_type: str, include: Optional[Dict]=None, 
+                             exclude: Optional[Dict]=None, show: bool=True, save: bool=False, export: bool=False):
         self.check_for_valid_input_to_plotting_methods(analysis_type = analysis_type, recording_type = recording_type)
         df_to_use = self.select_corresponding_dataframe(recording_type = recording_type)
         if type(include) == dict:
@@ -77,6 +82,10 @@ class PatchProject:
         elif analysis_type == 'Boxplot':
             group_analysis = BoxplotAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
         group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
+        if export:
+            filename = f'{analysis_type}_group_analysis_{recording_type}_{group_column}_{group_id}.xlsx'
+            filepath = self.database.subdirectories.exported_excel_sheets.joinpath(filename)
+            df_to_use.to_excel(filepath)
     
     
     def compare_between_groups(self):

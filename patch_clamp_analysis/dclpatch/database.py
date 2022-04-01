@@ -487,3 +487,8 @@ class Subdirectories:
         except:
             self.project_summary = self.root_dir.joinpath('project_summary')
             os.mkdir(self.project_summary.as_posix()) 
+        
+        try: self.exported_excel_sheets = self.root_dir.joinpath([elem for elem in subdirectories if 'exported_excel_sheets' in elem][0])
+        except:
+            self.exported_excel_sheets = self.root_dir.joinpath('exported_excel_sheets')
+            os.mkdir(self.exported_excel_sheets.as_posix()) 
