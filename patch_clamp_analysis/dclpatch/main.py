@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from .database import Database, listdir_nohidden
-from .analysis import CDFAnalysis, BoxplotAnalysis
+from .analysis import CDFAnalysis, MeanComparisonOfCDFs, BoxplotAnalysis
 from typing import List, Dict, Optional
 
 
@@ -75,13 +75,19 @@ class PatchProject:
         df_to_use = df_to_use.loc[df_to_use[group_column] == group_id]
         self.check_for_multiple_groups_in_critical_columns(df = df_to_use)
         plot_title = self.create_plot_title(group_column = group_column, group_id = group_id, recording_type = recording_type, include = include, exclude = exclude)
-        if analysis_type == 'CDF':
+        if 'CDF' in analysis_type: #CDF@50
             if recording_type == 'current_clamp':
                 raise ValueError('CDF analysis is only possible for IPSPs or EPSPs.')
-            group_analysis = CDFAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
+            if '@' in analysis_type:
+                percentile = int(analysis_type[analysis_type.find('@') + 1:])
+                group_analysis = MeanComparisonOfCDFs(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
+                group_analysis.run_analysis(group_column = group_column, group_id = group_id, percentile = percentile, show = show, save = save)
+            elif analysis_type == 'CDF':
+                group_analysis = CDFAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
+                group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
         elif analysis_type == 'Boxplot':
             group_analysis = BoxplotAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
-        group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
+            group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
         if export:
             filename = f'{analysis_type}_group_analysis_{recording_type}_{group_column}_{group_id}.xlsx'
             filepath = self.database.subdirectories.exported_excel_sheets.joinpath(filename)
@@ -120,12 +126,20 @@ class PatchProject:
             df = self.database.inhibitory_voltage_clamp_recordings
         elif recording_type == 'EPSPs':
             df = self.database.excitatory_voltage_clamp_recordings
-        return df
+        return df.copy()
     
     
     def check_for_valid_input_to_plotting_methods(self, analysis_type: str, recording_type: str) -> None:
         if analysis_type not in ['CDF', 'Boxplot']:
-            raise ValueError(f'The "analysis_type" attribute you provide has to be one of the following: "CDF" or "Boxplot".')
+            if 'CDF@' not in analysis_type:
+                raise ValueError(f'The "analysis_type" attribute you provide has to be one of the following: "CDF" or "Boxplot".')
+            else:
+                try:
+                    probability_to_compare = int(analysis_type[analysis_type.find('@') + 1:])
+                except ValueError:
+                    error_message_line0 = 'The probability you tried to pass is not in a valid format.\n'
+                    error_message_line1 = 'For instance, if you want to compare the groups at a probability of 50, use: "analysis_type" = "CDF@50"'
+                    raise ValueError(error_message_line0 + error_message_line1)
         if recording_type not in ['current_clamp', 'IPSPs', 'EPSPs']:
             raise ValueError(f'The "recording_type" attribute you provide has to be one of the following: "current_clamp", "IPSPs", or "EPSPs".')
         
