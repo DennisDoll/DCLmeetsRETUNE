@@ -235,8 +235,12 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
         for recording_filepath in filepaths:
             self.get_data_for_cumulative_distributions(filepath = recording_filepath)
         df_all_events = pd.DataFrame(data=self.events_all_stim_paradigms)
-        percentile_data_per_stim_string = self.get_data_of_specific_percentile(df_all_events = df_all_events, percentile = percentile)
-        self.plot_percentile_data(percentile_datasets = percentile_data_per_stim_string, show = show, save = save) 
+        self.percentile_data_per_stim_string = self.get_data_of_specific_percentile(df_all_events = df_all_events, percentile = percentile)
+        self.plot_percentile_data(percentile_datasets = self.percentile_data_per_stim_string, show = show, save = save)
+        
+    
+    def get_data_for_export(self) -> Dict:
+        return self.percentile_data_per_stim_string
     
     
     def get_data_of_specific_percentile(self, df_all_events: pd.DataFrame, percentile: int) -> Dict:
@@ -247,7 +251,8 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
             percentile_data_per_stim_string[stim_string] = dict()
             for measurement in self.measurements:
                 percentile_data_per_stim_string[stim_string][measurement] = {'baseline': list(),
-                                                                             'stimulated': list()}
+                                                                             'stimulated': list(), 
+                                                                             'global_cell_id': list()}
                 for global_cell_id in df_all_events.loc[df_all_events['stimulation_string'] == stim_string, 'global_cell_id'].unique():
                     baseline = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == 'baseline') &
                                                                   (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
@@ -257,6 +262,7 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
                                                   percentile)
                     percentile_data_per_stim_string[stim_string][measurement]['baseline'] += [baseline]
                     percentile_data_per_stim_string[stim_string][measurement]['stimulated'] += [stimulated]
+                    percentile_data_per_stim_string[stim_string][measurement]['global_cell_id'] += [global_cell_id]
         return percentile_data_per_stim_string
     
     

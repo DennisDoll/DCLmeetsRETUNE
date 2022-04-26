@@ -82,6 +82,9 @@ class PatchProject:
                 percentile = int(analysis_type[analysis_type.find('@') + 1:])
                 group_analysis = MeanComparisonOfCDFs(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
                 group_analysis.run_analysis(group_column = group_column, group_id = group_id, percentile = percentile, show = show, save = save)
+                if export:
+                    percentile_dataset = group_analysis.get_data_for_export()
+                    df_to_use = pd.DataFrame(data = percentile_dataset)
             elif analysis_type == 'CDF':
                 group_analysis = CDFAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
                 group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
@@ -91,7 +94,8 @@ class PatchProject:
         if export:
             filename = f'{analysis_type}_group_analysis_{recording_type}_{group_column}_{group_id}.xlsx'
             filepath = self.database.subdirectories.exported_excel_sheets.joinpath(filename)
-            df_to_use.to_excel(filepath)
+            #df_to_use.to_excel(filepath)
+            return percentile_dataset
     
     
     def compare_between_groups(self):
