@@ -130,12 +130,19 @@ class BaseCDFAnalysis(ABC):
 
 
     def get_all_recording_filepaths(self):
+        # kept for backwards compatibility
         self.global_cell_ids = list(self.df.loc[self.df[self.group_column] == self.group_id, 'global_cell_id'].unique())
         filepaths = list()
         for global_cell_id in self.global_cell_ids:
             tmp_filepaths = self.database.list_all_column_values(global_cell_id = global_cell_id, recording_type = self.recording_type, column_name = 'filepath_detected_events')
             tmp_filepaths = [Path(elem) for elem in tmp_filepaths]
             filepaths = filepaths + tmp_filepaths
+        return filepaths
+    
+    def get_all_recording_filepaths_from_df(self):
+        self.global_cell_ids = list(self.df['global_cell_id'].values)
+        filepaths_as_strings = self.df['filepath_detected_events'].values
+        filepaths = [Path(elem) for elem in filepaths_as_strings]
         return filepaths
     
     @abstractmethod
@@ -150,7 +157,8 @@ class CDFAnalysis(BaseCDFAnalysis):
     def run_analysis(self, group_column: str, group_id: str, show: bool, save: bool):
         self.group_column = group_column
         self.group_id = group_id
-        filepaths = self.get_all_recording_filepaths()
+        #filepaths = self.get_all_recording_filepaths()
+        filepaths = self.get_all_recording_filepaths_from_df()
         for recording_filepath in filepaths:
             self.get_data_for_cumulative_distributions(filepath = recording_filepath)
         df_all_events = pd.DataFrame(data=self.events_all_stim_paradigms)
@@ -231,7 +239,8 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
         self.group_column = group_column
         self.group_id = group_id
         self.percentile = percentile
-        filepaths = self.get_all_recording_filepaths()
+        #filepaths = self.get_all_recording_filepaths()
+        filepaths = self.get_all_recording_filepaths_from_df()
         for recording_filepath in filepaths:
             self.get_data_for_cumulative_distributions(filepath = recording_filepath)
         df_all_events = pd.DataFrame(data=self.events_all_stim_paradigms)

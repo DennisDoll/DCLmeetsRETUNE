@@ -156,8 +156,14 @@ class PatchProject:
             else:
                 if type(value) == str:
                     chunks_of_df_to_include.append(df.loc[df[key] == value].copy())
+                elif type(value) == list:
+                    if key in ['stimulation_duration-ms', 'stimulation_frequency-Hz']:
+                        # since the values for the baseline are nan and pandas requires its one method .isnull() to check for these, we can´t include it in the list
+                        chunks_of_df_to_include.append(df.loc[(df[key].isin(value)) | (df[key].isnull())].copy())
+                    else:
+                        chunks_of_df_to_include.append(df.loc[df[key].isin(value)].copy())
                 else:
-                    raise ValueError(f'{value} is not a valid input! Only strings (e.g. "vlPAG") are possible, simply add a column multiple times with different values if needed.')
+                    raise ValueError(f'{value} is not a valid input! Only strings (e.g. "vlPAG") or lists of strings (e.g.: [np.nan, 200]) are possible, simply add a column multiple times with different values if needed.')
         df_after_inclusions = pd.concat(chunks_of_df_to_include, ignore_index = True)
         df_after_inclusions = df_after_inclusions.drop_duplicates(ignore_index = True)
         return df_after_inclusions
