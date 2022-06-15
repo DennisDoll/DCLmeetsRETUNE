@@ -51,6 +51,8 @@ class PatchProject:
                                      show: bool=True, save: bool=False, export: bool=False) -> None:
         self.check_for_valid_input_to_plotting_methods(analysis_type = analysis_type, recording_type = recording_type)
         df_to_use = self.select_corresponding_dataframe(recording_type = recording_type)
+        df_to_use = df_to_use.loc[df_to_use['global_cell_id'] == global_cell_id]
+        self.check_for_multiple_groups_in_critical_columns(df = df_to_use)
         if analysis_type == 'CDF':
             if recording_type == 'current_clamp':
                 raise ValueError('CDF analysis is only possible for IPSPs or EPSPs.')
