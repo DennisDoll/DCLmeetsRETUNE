@@ -1,25 +1,93 @@
-from pathlib import Path
-from typing import List
+from typing import List, Dict, Optional
+from abc import ABC, abstractmethod
 
+from pathlib import Path
+from pandas import DataFrame
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import stats
+import pingouin as pg
 import seaborn as sns
 
 from .database import Database
 
 
-class CDFAnalysis:
+
+class BoxplotAnalysis:
     
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, df_to_use: DataFrame, recording_type: str, plot_title: str):
         self.database = database
+        self.df = df_to_use
+        self.recording_type = recording_type
+        self.plot_title = plot_title
+        
+    
+    def run_analysis(self, group_column: str, group_id: str, show: bool, save: bool):
+        self.group_column = group_column
+        self.group_id = group_id
+        data = self.df.loc[self.df[group_column] == group_id]
+        self.plot_boxplots(data = data, show = show, save = save)
+        
+    
+    def plot_boxplots(self, data: DataFrame, show: bool, save: bool):
+        columns = list(data.columns)
+        relevant_columns = columns[columns.index('pharmacology') + 1 : columns.index('filepath_main_excel_sheet')]
+        n_cols = 5
+        if len(relevant_columns) % n_cols == 0:
+            n_rows = int(len(relevant_columns) / n_cols)
+        else:
+            n_rows = int(len(relevant_columns) / n_cols) + 1
+            
+        fig = plt.figure(figsize=(16, 5*n_rows), facecolor='white')
+        gs = fig.add_gridspec(n_rows, n_cols)
+        
+        for column_name in relevant_columns:
+            row_idx = int(relevant_columns.index(column_name) / n_cols)
+            col_idx = relevant_columns.index(column_name) % n_cols
+            ax = fig.add_subplot(gs[row_idx, col_idx])
+                
+            sns.boxplot(data = data, x = 'stimulation_string', y = column_name, showfliers = False, palette = 'viridis', ax=ax)
+            sns.stripplot(data = data, x = 'stimulation_string', y = column_name, color = 'black', size=7, ax=ax)
+            
+            if relevant_columns.index(column_name) < len(relevant_columns) - n_cols:
+                plt.xlabel('')
+                plt.xticks([])
+            else:
+                plt.xlabel('')
+                plt.xticks(rotation = 90)
+        plt.suptitle(self.plot_title, y=1.0, fontsize=12)
+        plt.tight_layout()
+
+        if save:
+            if len(list(data['global_cell_id'])) == 1:
+                directory = self.database.subdirectories.single_cell_analyses.as_posix()
+                filename = f'{list(data["global_cell_id"])[0]}_{self.recording_type}'
+            else:
+                directory = self.database.subdirectories.group_analyses.as_posix()
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}'
+            plt.savefig(f'{directory}/{filename}.png', dpi=300)
+        
+        if show:    
+            plt.show()
+        else:
+            plt.close()
+            
+        
+class BaseCDFAnalysis(ABC):
+
+    def __init__(self, database: Database, df_to_use: DataFrame, recording_type: str, plot_title: Optional[str]=None) -> None:
+        self.database = database
+        self.df = df_to_use
+        self.recording_type = recording_type
+        self.plot_title = plot_title
         self.events_all_stim_paradigms = {'global_cell_id': list(),
                                           'stimulation_string': list(), 
                                           'amplitude': list(), 
                                           'inter_event_interval': list(), 
                                           'sweep': list()}
-    
+
+
     def get_stars_string(self, p: float) -> str:
         if p <= 0.001:
             stars_string = '***'
@@ -30,8 +98,9 @@ class CDFAnalysis:
         else:
             stars_string = 'n.s.'
         return stars_string 
-    
-    def get_data_for_cumulative_distributions(self, filepath: Path):
+
+
+    def get_data_for_cumulative_distributions(self, filepath: Path) -> None:
             events_single_stim_paradigm = pd.read_csv(filepath)
             columns = list(events_single_stim_paradigm.columns)
             for column_name in columns:
@@ -44,9 +113,8 @@ class CDFAnalysis:
                 else:
                     continue
             
-            df = self.database.cell_recordings_metadata
-            stim_string = df.loc[df['filepath_detected_events'] == filepath.as_posix(), 'stimulation_string'].values[0]
-            global_cell_id = df.loc[df['filepath_detected_events'] == filepath.as_posix(), 'global_cell_id'].values[0]
+            stim_string = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'stimulation_string'].values[0]
+            global_cell_id = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'global_cell_id'].values[0]
 
             mean_inter_event_intervals = list()
             for sweep_id in events_single_stim_paradigm[sweep_column].unique():
@@ -59,21 +127,38 @@ class CDFAnalysis:
             self.events_all_stim_paradigms['sweep'] += list(events_single_stim_paradigm[sweep_column].values)
             self.events_all_stim_paradigms['inter_event_interval'] += mean_inter_event_intervals
             self.events_all_stim_paradigms['amplitude'] += list(events_single_stim_paradigm[event_amplitude_column].values)
-    
+
+
     def get_all_recording_filepaths(self):
-        df = self.database.cell_recordings_metadata
-        self.global_cell_ids = list(df.loc[df[self.group_column] == self.group_id, 'global_cell_id'].unique())
+        # kept for backwards compatibility
+        self.global_cell_ids = list(self.df.loc[self.df[self.group_column] == self.group_id, 'global_cell_id'].unique())
         filepaths = list()
         for global_cell_id in self.global_cell_ids:
-            tmp_filepaths = self.database.list_all_column_values(global_cell_id = global_cell_id, column_name = 'filepath_detected_events')
+            tmp_filepaths = self.database.list_all_column_values(global_cell_id = global_cell_id, recording_type = self.recording_type, column_name = 'filepath_detected_events')
             tmp_filepaths = [Path(elem) for elem in tmp_filepaths]
             filepaths = filepaths + tmp_filepaths
         return filepaths
+    
+    def get_all_recording_filepaths_from_df(self):
+        self.global_cell_ids = list(self.df['global_cell_id'].values)
+        filepaths_as_strings = self.df['filepath_detected_events'].values
+        filepaths = [Path(elem) for elem in filepaths_as_strings]
+        return filepaths
+    
+    @abstractmethod
+    def run_analysis(self, group_column: str, group_id: str, show: bool, save: bool) -> None:
+        pass
+
+
+
+class CDFAnalysis(BaseCDFAnalysis):
+
 
     def run_analysis(self, group_column: str, group_id: str, show: bool, save: bool):
         self.group_column = group_column
         self.group_id = group_id
-        filepaths = self.get_all_recording_filepaths()
+        #filepaths = self.get_all_recording_filepaths()
+        filepaths = self.get_all_recording_filepaths_from_df()
         for recording_filepath in filepaths:
             self.get_data_for_cumulative_distributions(filepath = recording_filepath)
         df_all_events = pd.DataFrame(data=self.events_all_stim_paradigms)
@@ -81,7 +166,8 @@ class CDFAnalysis:
                        columns_for_cdfs = ['amplitude', 'inter_event_interval'], 
                        show = show,
                        save = save)
-    
+
+
     def plot_cdfs(self, data: pd.DataFrame, columns_for_cdfs: List, show: bool, save: bool):
         stim_paradigms = list(data['stimulation_string'].unique())
         stim_paradigms.remove('baseline')
@@ -122,16 +208,16 @@ class CDFAnalysis:
         if len(self.global_cell_ids) == 1:
             plt.suptitle(f'Single cell analyses of global_cell_id #{self.global_cell_ids[0]}', fontsize=12)
         else:
-            plt.suptitle(f'Group analyses of all cells matching: {self.group_id} in {self.group_column}', y=1.0, fontsize=12)
+            plt.suptitle(self.plot_title, y=1.0, fontsize=12)
         plt.tight_layout()
         
         if save:
             if len(self.global_cell_ids) == 1:
                 directory = self.database.subdirectories.single_cell_analyses.as_posix()
-                filename = f'{self.global_cell_ids[0]}'
+                filename = f'{self.global_cell_ids[0]}_{self.recording_type}'
             else:
                 directory = self.database.subdirectories.group_analyses.as_posix()
-                filename = f'all_cells_{self.group_id}_in_{self.group_column}'
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}'
             for parameter in columns_for_cdfs:
                 filename = filename + f'_{parameter}'
             plt.savefig(f'{directory}/{filename}.png', dpi=300)
@@ -140,10 +226,97 @@ class CDFAnalysis:
             plt.show()
         else:
             plt.close()
+
+
+
+class MeanComparisonOfCDFs(BaseCDFAnalysis):
     
+    @property
+    def measurements(self):
+        return ['amplitude', 'inter_event_interval']
+    
+    def run_analysis(self, group_column: str, group_id: str, percentile: int, show: bool, save: bool):
+        self.group_column = group_column
+        self.group_id = group_id
+        self.percentile = percentile
+        #filepaths = self.get_all_recording_filepaths()
+        filepaths = self.get_all_recording_filepaths_from_df()
+        for recording_filepath in filepaths:
+            self.get_data_for_cumulative_distributions(filepath = recording_filepath)
+        df_all_events = pd.DataFrame(data=self.events_all_stim_paradigms)
+        self.percentile_data_per_stim_string = self.get_data_of_specific_percentile(df_all_events = df_all_events, percentile = percentile)
+        self.plot_percentile_data(percentile_datasets = self.percentile_data_per_stim_string, show = show, save = save)
         
     
+    def get_data_for_export(self) -> Dict:
+        return self.percentile_data_per_stim_string
     
     
+    def get_data_of_specific_percentile(self, df_all_events: pd.DataFrame, percentile: int) -> Dict:
+        percentile_data_per_stim_string = dict()
+        stim_paradigms = list(df_all_events['stimulation_string'].unique())
+        stim_paradigms.remove('baseline')
+        for stim_string in stim_paradigms:
+            percentile_data_per_stim_string[stim_string] = dict()
+            for measurement in self.measurements:
+                percentile_data_per_stim_string[stim_string][measurement] = {'baseline': list(),
+                                                                             'stimulated': list(), 
+                                                                             'global_cell_id': list()}
+                for global_cell_id in df_all_events.loc[df_all_events['stimulation_string'] == stim_string, 'global_cell_id'].unique():
+                    baseline = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == 'baseline') &
+                                                                  (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
+                                                percentile)
+                    stimulated = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == stim_string) &
+                                                                    (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
+                                                  percentile)
+                    percentile_data_per_stim_string[stim_string][measurement]['baseline'] += [baseline]
+                    percentile_data_per_stim_string[stim_string][measurement]['stimulated'] += [stimulated]
+                    percentile_data_per_stim_string[stim_string][measurement]['global_cell_id'] += [global_cell_id]
+        return percentile_data_per_stim_string
     
     
+    def plot_percentile_data(self, percentile_datasets: Dict, show: bool, save: bool, jitter: float=0.1) -> None:
+        stimulation_strings = percentile_datasets.keys()
+        n_rows = len(stimulation_strings)
+        n_columns = len(self.measurements)
+        
+        fig = plt.figure(figsize=(6*n_columns, 3*n_rows), facecolor='white')
+        gs = fig.add_gridspec(n_rows, n_columns)
+        
+        for stim_string, row_index in zip(stimulation_strings, range(n_rows)):
+            for measurement, column_index in zip(self.measurements, range(n_columns)):
+                df_temp = pd.DataFrame(data = percentile_datasets[stim_string][measurement])
+                stats = pg.wilcoxon(x=df_temp['baseline'], y=df_temp['stimulated'])
+                pval = stats['p-val']['Wilcoxon']
+                stars_string = self.get_stars_string(p = pval)
+                n_cells = df_temp.shape[0]
+                df_x_jitter = pd.DataFrame(np.random.normal(loc=0, scale=jitter, size=df_temp.values.shape), columns=df_temp.columns)
+                df_x_jitter += np.arange(len(df_temp.columns))
+                colormixer = plt.cm.viridis(np.linspace(0, 1, len(df_temp.columns) + 2))
+                colormixer = colormixer[1 : -1]
+                ax = fig.add_subplot(gs[row_index, column_index])
+                for column, color in zip(df_temp.columns, colormixer):
+                    ax.plot(df_x_jitter[column], df_temp[column], 'o', color=color, alpha=.60, zorder=1, ms=8, mew=1)
+                ax.set_xticks(range(2))
+                ax.set_xticklabels(['baseline', 'stimulated'])
+                ax.set_xlim(-0.5,2-0.5)
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)               
+                for idx in df_temp.index:
+                    ax.plot(df_x_jitter.loc[idx,['baseline','stimulated']], df_temp.loc[idx,['baseline','stimulated']], color = 'grey', linewidth = 0.5, linestyle = '--', zorder=-1)
+                plt.text(0.5, 0.85, f'{stars_string} ({round(pval, 3)})', 
+                         horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+                plt.title(f'{stim_string} - {measurement}', pad = 10, fontsize=10)
+        plt.suptitle(f'{self.plot_title} at {self.percentile}th percentile' , y=1.0, fontsize=12)
+        plt.tight_layout()
+
+        if save:
+            directory = self.database.subdirectories.group_analyses.as_posix()
+            filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}_at_{self.percentile}th_percentile'
+            plt.savefig(f'{directory}/{filename}.png', dpi=300)
+        
+        if show:    
+            plt.show()
+        else:
+            plt.close()
+        
