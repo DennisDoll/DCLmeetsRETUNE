@@ -39,13 +39,15 @@ class PatchProject:
             path_to_cell_recordings_dir = Path(cell_recordings_dir)
             try:
                 self.add_cell_to_database(path_to_cell_recordings_dir = path_to_cell_recordings_dir, overwrite = overwrite)
-            except:
-                user_warning_line1 = 'Warning! When I tried to load the data of the following path:\n'
-                user_warning_line2 = f'{path_to_cell_recordings_dir.as_posix()}\n'
-                user_warning_line3 = 'For now, I skipped these data to continue. Try loading that dataset individually to see more details about the Error.\n'
-                user_warning_line4 = '_________________________________________'
-                user_warning = user_warning_line1 + user_warning_line2 + user_warning_line3 + user_warning_line4
-                print(user_warning)
+            except Exception as e:
+                print('_____________________________________________________________________________\n'
+                      'Warning! When I tried to load the data of the following path: '
+                      f'"{path_to_cell_recordings_dir.as_posix()}", '
+                      'the following error occured:\n'
+                      f'"{e}"\n'
+                      'For now, I skipped loading these data to continue. Try loading that dataset individually to see more details '
+                      'about the error or try to follow the instructions that might be given in the error message above.\n'
+                      '_____________________________________________________________________________')
         
     def compare_on_single_cell_level(self, global_cell_id: str, analysis_type: str, recording_type: str, 
                                      show: bool=True, save: bool=False, export: bool=False) -> None:
