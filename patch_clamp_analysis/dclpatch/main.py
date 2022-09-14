@@ -81,7 +81,10 @@ class PatchProject:
             if recording_type == 'current_clamp':
                 raise ValueError('CDF analysis is only possible for IPSPs or EPSPs.')
             if '@' in analysis_type:
-                percentile = int(analysis_type[analysis_type.find('@') + 1:])
+                if 'mean' in analysis_type:
+                    percentile = 'mean'
+                else:
+                    percentile = int(analysis_type[analysis_type.find('@') + 1:])
                 group_analysis = MeanComparisonOfCDFs(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
                 group_analysis.run_analysis(group_column = group_column, group_id = group_id, percentile = percentile, show = show, save = save)
                 if export:
@@ -140,12 +143,12 @@ class PatchProject:
             if 'CDF@' not in analysis_type:
                 raise ValueError(f'The "analysis_type" attribute you provide has to be one of the following: "CDF" or "Boxplot".')
             else:
-                try:
-                    probability_to_compare = int(analysis_type[analysis_type.find('@') + 1:])
-                except ValueError:
-                    error_message_line0 = 'The probability you tried to pass is not in a valid format.\n'
-                    error_message_line1 = 'For instance, if you want to compare the groups at a probability of 50, use: "analysis_type" = "CDF@50"'
-                    raise ValueError(error_message_line0 + error_message_line1)
+                if "mean" not in analysis_type:
+                    try:
+                        probability_to_compare = int(analysis_type[analysis_type.find('@') + 1:])
+                    except ValueError:
+                        raise ValueError('"xx" in "CDF@xx" has to be either a percentile (e.g. "1", "17" or "50") '
+                                         f'or "mean" - but not {percentile}. Please correct and run this cell again!')
         if recording_type not in ['current_clamp', 'IPSPs', 'EPSPs']:
             raise ValueError(f'The "recording_type" attribute you provide has to be one of the following: "current_clamp", "IPSPs", or "EPSPs".')
         

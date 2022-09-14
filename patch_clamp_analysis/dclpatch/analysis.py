@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from abc import ABC, abstractmethod
 
 from pathlib import Path
@@ -116,7 +116,7 @@ class BaseCDFAnalysis(ABC):
             stim_string = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'stimulation_string'].values[0]
             global_cell_id = self.df.loc[self.df['filepath_detected_events'] == filepath.as_posix(), 'global_cell_id'].values[0]
 
-            mean_inter_event_intervals = list()
+            mean_inter_event_intervals = []
             for sweep_id in events_single_stim_paradigm[sweep_column].unique():
                 event_times = events_single_stim_paradigm.loc[events_single_stim_paradigm[sweep_column] == sweep_id, event_time_column]
                 time_differences = event_times.rolling(2).apply(np.diff)
@@ -128,7 +128,7 @@ class BaseCDFAnalysis(ABC):
             self.events_all_stim_paradigms['inter_event_interval'] += mean_inter_event_intervals
             self.events_all_stim_paradigms['amplitude'] += list(events_single_stim_paradigm[event_amplitude_column].values)
 
-
+    """
     def get_all_recording_filepaths(self):
         # kept for backwards compatibility
         self.global_cell_ids = list(self.df.loc[self.df[self.group_column] == self.group_id, 'global_cell_id'].unique())
@@ -138,6 +138,7 @@ class BaseCDFAnalysis(ABC):
             tmp_filepaths = [Path(elem) for elem in tmp_filepaths]
             filepaths = filepaths + tmp_filepaths
         return filepaths
+    """
     
     def get_all_recording_filepaths_from_df(self):
         self.global_cell_ids = list(self.df['global_cell_id'].values)
@@ -252,7 +253,7 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
         return self.percentile_data_per_stim_string
     
     
-    def get_data_of_specific_percentile(self, df_all_events: pd.DataFrame, percentile: int) -> Dict:
+    def get_data_of_specific_percentile(self, df_all_events: pd.DataFrame, percentile: Union[int, str]) -> Dict:
         percentile_data_per_stim_string = dict()
         stim_paradigms = list(df_all_events['stimulation_string'].unique())
         stim_paradigms.remove('baseline')
@@ -263,12 +264,18 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
                                                                              'stimulated': list(), 
                                                                              'global_cell_id': list()}
                 for global_cell_id in df_all_events.loc[df_all_events['stimulation_string'] == stim_string, 'global_cell_id'].unique():
-                    baseline = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == 'baseline') &
-                                                                  (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
-                                                percentile)
-                    stimulated = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == stim_string) &
-                                                                    (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
-                                                  percentile)
+                    if type(percentile) == int:
+                        baseline = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == 'baseline') &
+                                                                      (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
+                                                    percentile)
+                        stimulated = np.nanpercentile(df_all_events.loc[(df_all_events['stimulation_string'] == stim_string) &
+                                                                        (df_all_events['global_cell_id'] == global_cell_id), measurement].values,
+                                                      percentile)
+                    else: # percentile == mean:
+                        baseline = np.nanmean(df_all_events.loc[(df_all_events['stimulation_string'] == 'baseline') &
+                                                             (df_all_events['global_cell_id'] == global_cell_id), measurement].values)
+                        stimulated = np.nanmean(df_all_events.loc[(df_all_events['stimulation_string'] == stim_string) &
+                                                               (df_all_events['global_cell_id'] == global_cell_id), measurement].values)
                     percentile_data_per_stim_string[stim_string][measurement]['baseline'] += [baseline]
                     percentile_data_per_stim_string[stim_string][measurement]['stimulated'] += [stimulated]
                     percentile_data_per_stim_string[stim_string][measurement]['global_cell_id'] += [global_cell_id]
@@ -307,12 +314,18 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
                 plt.text(0.5, 0.85, f'{stars_string} ({round(pval, 3)})', 
                          horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
                 plt.title(f'{stim_string} - {measurement}', pad = 10, fontsize=10)
-        plt.suptitle(f'{self.plot_title} at {self.percentile}th percentile' , y=1.0, fontsize=12)
+        if self.percentile == 'mean':
+            plt.suptitle(f'{self.plot_title} at {self.percentile} values' , y=1.0, fontsize=12)
+        else:
+            plt.suptitle(f'{self.plot_title} at {self.percentile}th percentile' , y=1.0, fontsize=12)
         plt.tight_layout()
 
         if save:
             directory = self.database.subdirectories.group_analyses.as_posix()
-            filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}_at_{self.percentile}th_percentile'
+            if self.percentile == 'mean':
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}_at_{self.percentile}'
+            else:
+                filename = f'{self.group_id}_in_{self.group_column}_{self.recording_type}_at_{self.percentile}th_percentile'
             plt.savefig(f'{directory}/{filename}.png', dpi=300)
         
         if show:    
