@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Tuple
 from abc import ABC, abstractmethod
 
 from pathlib import Path
@@ -249,8 +249,25 @@ class MeanComparisonOfCDFs(BaseCDFAnalysis):
         self.plot_percentile_data(percentile_datasets = self.percentile_data_per_stim_string, show = show, save = save)
         
     
-    def get_data_for_export(self) -> Dict:
-        return self.percentile_data_per_stim_string
+    def get_data_for_export(self) -> Tuple[List[pd.DataFrame], List[str]]:
+        dfs, tab_names = [], []
+        d = self.percentile_data_per_stim_string.copy()
+        for stimulation_paradigm in d.keys():
+            for analyzed_feature, data_per_condition in d[stimulation_paradigm].items():
+                dcl_stats_n_plots_export_scheme = {'data': [], 'group_id': []}
+                for condition, data_values in data_per_condition.items():
+                    if condition == 'global_cell_id':
+                        continue
+                    else:
+                        dcl_stats_n_plots_export_scheme['data'] += data_values
+                        dcl_stats_n_plots_export_scheme['group_id'] += [condition] * len(data_values)
+                dfs.append(pd.DataFrame(data=dcl_stats_n_plots_export_scheme))
+                if analyzed_feature == 'inter_event_interval':
+                    feature_name_for_tab = 'IEI'
+                else:
+                    feature_name_for_tab = analyzed_feature
+                tab_names.append(f'{feature_name_for_tab}_at_{stimulation_paradigm}')        
+        return dfs, tab_names
     
     
     def get_data_of_specific_percentile(self, df_all_events: pd.DataFrame, percentile: Union[int, str]) -> Dict:
