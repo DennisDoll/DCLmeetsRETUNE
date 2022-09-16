@@ -211,10 +211,15 @@ class CellRecording:
     
 class DataExtractor(ABC):
     
-    @abstractmethod
     def __init__(self, df: DataFrame) -> None:
         self.input_df = df
-        self.recording_method = 'voltage_clamp' # or: 'current_clamp'
+
+    
+    @property
+    @abstractmethod
+    def recording_method(self) -> str:
+        # e.g. 'voltage_clamp' or 'current_clamp'
+        pass
 
     
     def create_recording_specific_dataframe(self, cell_recording_obj: CellRecording) -> DataFrame:
@@ -312,10 +317,27 @@ class DataExtractor(ABC):
                             filepaths_of_detected_events.append(elem)
             if len(filepaths_of_detected_events) > 0:
                 stimulation_strings_from_filenames = self.get_stimulation_strings_from_filenames(filepaths_of_detected_events = filepaths_of_detected_events)
-                df_with_filepaths = self.add_cross_validated_event_filepaths(df_without_event_filepaths = df_with_filepaths, strings_to_compare = stimulation_strings_from_filenames)
+                df_with_filepaths = self.add_event_filepaths(df_without_event_filepaths = df_with_filepaths, strings_to_compare = stimulation_strings_from_filenames)
         else:
             df_with_filepaths
         return df_with_filepaths
+    
+    def add_event_filepaths(self, df_without_event_filepaths: DataFrame, strings_to_compare: Dict) -> DataFrame:
+        df_strings_to_compare = pd.DataFrame(data=strings_to_compare)
+        df = df_without_event_filepaths.copy()
+        for stimulation_string, recording_type in zip(df['stimulation_string'].values, df['recording_type'].values):
+            postsynaptic_current_type = recording_type[:recording_type.find('_')]
+            try:
+                filepath_detected_events = df_strings_to_compare.loc[(df_strings_to_compare['stimulation_string'] == stimulation_string) &
+                                                                     (df_strings_to_compare['postsynaptic_current_type'] == postsynaptic_current_type),
+                                                                     'filepath_detected_events'].values[0]
+                df.loc[(df['stimulation_string'] == stimulation_string) & (df['recording_type'] == recording_type), 'filepath_detected_events'] = filepath_detected_events
+            except IndexError:
+                cell_identifier = f'{df["date"].iloc[0]}_{df["session_cell_id"].iloc[0]}'
+                raise IndexError(f'Could not find a file with recorded events for cell: {cell_identifier} '
+                                 f'for {recording_type} with stimulation type: {stimulation_string}. Please check '
+                                 'the corresponding files!')
+        return df
         
 
     def add_cross_validated_event_filepaths(self, df_without_event_filepaths: DataFrame, strings_to_compare: Dict) -> DataFrame:
@@ -331,10 +353,11 @@ class DataExtractor(ABC):
                 
 
     def get_stimulation_strings_from_filenames(self, filepaths_of_detected_events: List) -> Dict:
-        stimulation_paradigms = {'stimulation_string': list(),
-                                 'stimulation_frequency-Hz': list(),
-                                 'stimulation_duration-ms': list(), 
-                                 'filepath_detected_events': list()}
+        stimulation_paradigms = {'stimulation_string': [],
+                                 'stimulation_frequency-Hz': [],
+                                 'stimulation_duration-ms': [], 
+                                 'filepath_detected_events': [],
+                                 'postsynaptic_current_type': []}
         for filepath in filepaths_of_detected_events:
             filename = filepath.name
             filename = filename.replace('.csv', '')
@@ -357,7 +380,7 @@ class DataExtractor(ABC):
                     stimulation_duration = int(stimulation_duration[:stimulation_duration.find('s')]) * 1000
                 else:
                     stimulation_duration = int(stimulation_duration[:stimulation_duration.find('ms')])
-                stimulation_paradigm = f'{stimulation_frequency}-Hz_for_{stimulation_duration}-ms'          
+                stimulation_paradigm = f'{stimulation_frequency}-Hz_for_{stimulation_duration}-ms'
             elif filename.endswith('Bsl'):
                 stimulation_frequency = np.NaN
                 stimulation_duration = np.NaN
@@ -374,26 +397,24 @@ class DataExtractor(ABC):
             stimulation_paradigms['stimulation_string'].append(stimulation_paradigm)
             stimulation_paradigms['stimulation_frequency-Hz'].append(stimulation_frequency)
             stimulation_paradigms['stimulation_duration-ms'].append(stimulation_duration)
-            stimulation_paradigms['filepath_detected_events'].append(filepath.as_posix())    
+            stimulation_paradigms['filepath_detected_events'].append(filepath.as_posix())
+            stimulation_paradigms['postsynaptic_current_type'].append(postsynaptic_current_type)
         return stimulation_paradigms
-    
-
 
     
 class ExtractVoltageClampData(DataExtractor):
 
-    def __init__(self, df: DataFrame) -> None:
-        self.input_df = df
-        self.recording_method = 'voltage_clamp' 
+    @property
+    def recording_method(self) -> str:
+        return 'voltage_clamp' 
 
 
 
 class ExtractCurrentClampData(DataExtractor):
 
-    def __init__(self, df: DataFrame) -> None:
-        self.input_df = df
-        self.recording_method = 'current_clamp'
-
+    @property
+    def recording_method(self) -> str:
+        return 'current_clamp' 
     
     
 """      
