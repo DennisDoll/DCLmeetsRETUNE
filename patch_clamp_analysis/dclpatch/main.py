@@ -39,13 +39,15 @@ class PatchProject:
             path_to_cell_recordings_dir = Path(cell_recordings_dir)
             try:
                 self.add_cell_to_database(path_to_cell_recordings_dir = path_to_cell_recordings_dir, overwrite = overwrite)
-            except:
-                user_warning_line1 = 'Warning! When I tried to load the data of the following path:\n'
-                user_warning_line2 = f'{path_to_cell_recordings_dir.as_posix()}\n'
-                user_warning_line3 = 'For now, I skipped these data to continue. Try loading that dataset individually to see more details about the Error.\n'
-                user_warning_line4 = '_________________________________________'
-                user_warning = user_warning_line1 + user_warning_line2 + user_warning_line3 + user_warning_line4
-                print(user_warning)
+            except Exception as e:
+                print('_____________________________________________________________________________\n'
+                      'Warning! When I tried to load the data of the following path: '
+                      f'"{path_to_cell_recordings_dir.as_posix()}", '
+                      'the following error occured:\n'
+                      f'"{e}"\n'
+                      'For now, I skipped loading these data to continue. Try loading that dataset individually to see more details '
+                      'about the error or try to follow the instructions that might be given in the error message above.\n'
+                      '_____________________________________________________________________________')
         
     def compare_on_single_cell_level(self, global_cell_id: str, analysis_type: str, recording_type: str, 
                                      show: bool=True, save: bool=False, export: bool=False) -> None:
@@ -68,6 +70,7 @@ class PatchProject:
     
     def compare_within_group(self, group_column: str, group_id: str, analysis_type: str, recording_type: str, include: Optional[Dict]=None, 
                              exclude: Optional[Dict]=None, show: bool=True, save: bool=False, export: bool=False):
+        use_excel_writer = False
         self.check_for_valid_input_to_plotting_methods(analysis_type = analysis_type, recording_type = recording_type)
         df_to_use = self.select_corresponding_dataframe(recording_type = recording_type)
         if type(include) == dict:
@@ -81,12 +84,15 @@ class PatchProject:
             if recording_type == 'current_clamp':
                 raise ValueError('CDF analysis is only possible for IPSPs or EPSPs.')
             if '@' in analysis_type:
-                percentile = int(analysis_type[analysis_type.find('@') + 1:])
+                if 'mean' in analysis_type:
+                    percentile = 'mean'
+                else:
+                    percentile = int(analysis_type[analysis_type.find('@') + 1:])
                 group_analysis = MeanComparisonOfCDFs(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
                 group_analysis.run_analysis(group_column = group_column, group_id = group_id, percentile = percentile, show = show, save = save)
                 if export:
-                    percentile_dataset = group_analysis.get_data_for_export()
-                    df_to_use = pd.DataFrame(data = percentile_dataset)
+                    use_excel_writer = True
+                    dfs, tab_names = group_analysis.get_data_for_export()
             elif analysis_type == 'CDF':
                 group_analysis = CDFAnalysis(database = self.database, df_to_use = df_to_use, recording_type = recording_type, plot_title = plot_title)
                 group_analysis.run_analysis(group_column = group_column, group_id = group_id, show = show, save = save)
@@ -96,8 +102,14 @@ class PatchProject:
         if export:
             filename = f'{analysis_type}_group_analysis_{recording_type}_{group_column}_{group_id}.xlsx'
             filepath = self.database.subdirectories.exported_excel_sheets.joinpath(filename)
-            #df_to_use.to_excel(filepath)
-            return percentile_dataset
+            if use_excel_writer:
+                writer = pd.ExcelWriter(filepath, engine='openpyxl')
+                for df, tab_name in zip(dfs, tab_names): 
+                    df.to_excel(writer, sheet_name=tab_name, index=False)
+                writer.save()
+            else:
+                df_to_use.to_excel(filepath)
+            #return percentile_dataset
     
     
     def compare_between_groups(self):
@@ -140,12 +152,12 @@ class PatchProject:
             if 'CDF@' not in analysis_type:
                 raise ValueError(f'The "analysis_type" attribute you provide has to be one of the following: "CDF" or "Boxplot".')
             else:
-                try:
-                    probability_to_compare = int(analysis_type[analysis_type.find('@') + 1:])
-                except ValueError:
-                    error_message_line0 = 'The probability you tried to pass is not in a valid format.\n'
-                    error_message_line1 = 'For instance, if you want to compare the groups at a probability of 50, use: "analysis_type" = "CDF@50"'
-                    raise ValueError(error_message_line0 + error_message_line1)
+                if "mean" not in analysis_type:
+                    try:
+                        probability_to_compare = int(analysis_type[analysis_type.find('@') + 1:])
+                    except ValueError:
+                        raise ValueError('"xx" in "CDF@xx" has to be either a percentile (e.g. "1", "17" or "50") '
+                                         f'or "mean" - but not {percentile}. Please correct and run this cell again!')
         if recording_type not in ['current_clamp', 'IPSPs', 'EPSPs']:
             raise ValueError(f'The "recording_type" attribute you provide has to be one of the following: "current_clamp", "IPSPs", or "EPSPs".')
         
